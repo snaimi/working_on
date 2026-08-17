@@ -3,12 +3,13 @@ import time
 from typing import Dict, List, Optional, Any
 
 # Import parsed assets and calculated pathfinding metrics
-from new_parsing import parsed_map, nb_drones
+from parsing import parsed_map, nb_drones
 from coast_per_zone import list_zones, zone_lookup, zone_costs, cumulative_costs
 
 
 class ZoneFormatter:
-    """Handles ANSI color mapping, rainbow styling, and console output colorization."""
+    """Handles ANSI color mapping, rainbow styling,
+    and console output colorization."""
 
     ANSI_COLOR_MAP: Dict[str, str] = {
         "none": "0",
@@ -98,7 +99,7 @@ class DynamicDroneSimulation:
         occupancy_tracker: Dict[str, int],
         zone_capacities: Dict[str, int],
     ) -> None:
-        """Decide next destination strictly progressing forward towards goal."""
+        """Decide next destination towards goal."""
         if self.finished or self.target_zone is not None:
             return
 
@@ -190,7 +191,7 @@ class SimulationManager:
         self.formatter: ZoneFormatter = ZoneFormatter(zones)
 
     def run(self) -> None:
-        print("\n--- Capacity-Aware Connection-Style Simulation ---")
+        print("\n--- Connection-Style Simulation ---")
 
         while self.active_drones or self.unspawned_count > 0:
             self._spawn_drones()

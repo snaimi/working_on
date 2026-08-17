@@ -4,9 +4,7 @@ from typing import Annotated, Any, Dict, List, Literal, Set, Tuple
 from pydantic import BaseModel, Field, PositiveInt, ValidationError
 
 
-# ==========================================
 # Pydantic Schemas for Validation
-# ==========================================
 
 class DroneCountModel(BaseModel):
     nb_drones: Annotated[PositiveInt, Field(strict=True)]
@@ -37,9 +35,7 @@ class ConnectionModel(BaseModel):
     max_link_capacity: Annotated[PositiveInt, Field(strict=True)] = 1
 
 
-# ==========================================
 # Domain Data Classes
-# ==========================================
 
 @dataclass
 class Hub:
@@ -50,7 +46,7 @@ class Hub:
     child: List[str] = field(default_factory=list)
 
 
-# Type alias for backward compatibility across project modules
+# Type alias for backward compatibility
 zone = Hub
 
 
@@ -70,9 +66,7 @@ class ParsedMap:
     connections: List[Connection]
 
 
-# ==========================================
 # Object-Oriented Parser Logic
-# ==========================================
 
 class MapParser:
     VALID_KEYS: Set[str] = {
@@ -100,7 +94,8 @@ class MapParser:
         self._first_processed_line: int = 0
 
     def parse(self) -> ParsedMap:
-        """Parses the map file line by line and returns the fully populated ParsedMap."""
+        """Parses the map file line by line and
+        returns the fully populated ParsedMap."""
         try:
             with open(self.filepath, "r") as f:
                 for line_num, raw_line in enumerate(f, start=1):
@@ -115,6 +110,11 @@ class MapParser:
                         self._raise_error(
                             f"invalid file form : key error -> not a valid key : in line {line_num}"
                         )
+
+                    # Enforce that nb_drones must be the very first processed line
+                    if self._first_processed_line == 1 and key != "nb_drones":
+                        print(f"nb_drones is not correct : nb_drones is not in the 1st line ! -> in line {line_num}")
+                        sys.exit(1)
 
                     if key == "nb_drones":
                         self._parse_nb_drones(val, line_num)
@@ -132,9 +132,7 @@ class MapParser:
         self._validate_completion()
         return self._build_result()
 
-    # ------------------------------------------------------------------
     # Parsing Line Components
-    # ------------------------------------------------------------------
 
     def _parse_nb_drones(self, value_str: str, line_num: int) -> None:
         self._drone_line_count += 1
@@ -149,6 +147,10 @@ class MapParser:
 
         try:
             val_int = int(value_str)
+            if val_int < 0:
+                print(f"nb_drones is not correct : value cannot be negative ({val_int}) -> in line {line_num}")
+                sys.exit(1)
+
             DroneCountModel(nb_drones=val_int)
             self.nb_drones = val_int
         except (ValueError, ValidationError) as e:
@@ -162,24 +164,19 @@ class MapParser:
         elif "[" not in value_str and "]" not in value_str:
             main_part = value_str
             meta_part = "zone=normal color=none max_drones=1"
+        else:
+            sys.stderr.write(f"invalid metadata bracket form : error -> in line {line_num}\n")
+            sys.exit(1)
+
         details = main_part.strip().split()
         if len(details) != 3:
             sys.stderr.write(f"Presence of a space charachter : error in line {line_num}\n")
             sys.exit(1)
 
         hub_name, x_str, y_str = details[0], details[1], details[2]
-        # the missing of the start or goal condition
-        if (key == "start_hub"):
-            if (details[0] != "start"):
-                sys.stderr.write(f"no presence of start hub : error in line {line_num}\n")
-                sys.exit(1)
 
-        if (key == "end_hub"):
-            if (details[0] != "goal" and details[0] != "impossible_goal"):
-                sys.stderr.write(f"no presence of goal : error in line {line_num}\n")
-                sys.exit(1)
-
-        if "-" in hub_name or " " in hub_name:
+        # Zone name invalid if it contains '-' or '#' or spaces
+        if "-" in hub_name or "#" in hub_name or " " in hub_name:
             sys.stderr.write(f"invalid Zone name : error -> in line {line_num}\n")
             sys.exit(1)
 
@@ -187,17 +184,23 @@ class MapParser:
             sys.stderr.write(f"Presence of a dup name : error -> in line {line_num}\n")
             sys.exit(1)
 
-        # Meta extraction
+        # Meta extraction with duplicate key prevention
         meta_dict: Dict[str, Any] = {}
         for item in meta_part.strip().split():
             if "=" not in item:
                 sys.stderr.write(f"No value present : error -> in line {line_num}\n")
                 sys.exit(1)
             k, v = item.split("=", 1)
-            meta_dict[k] = int(v) if k == "max_drones" else v
-            if ((hub_name == "start" and k == "max_drones") or (hub_name == "goal" and k == "max_drones") or (hub_name == "impossible_goal" and k == "max_drones")):
-                meta_dict[k] = self.nb_drones
 
+            if k in meta_dict:
+                sys.stderr.write(f"Duplicate metadata key '{k}' : error -> in line {line_num}\n")
+                sys.exit(1)
+
+            meta_dict[k] = int(v) if k == "max_drones" else v
+
+        # Automatically assign max_drones for start_hub and end_hub
+        if key in {"start_hub", "end_hub"} and self.nb_drones is not None:
+            meta_dict["max_drones"] = self.nb_drones
 
         try:
             hub_model = HubModel(
@@ -208,9 +211,7 @@ class MapParser:
             )
         except (ValueError, ValidationError):
             sys.stderr.write(
-                f"irrespect of pydantic form : error -> in line {line_num}\n"
-                if not isinstance(ValidationError, Exception)
-                else f"invalid file form : error in the {key} field -> in line {line_num}\n"
+                f"invalid file form : error in the {key} field -> in line {line_num}\n"
             )
             sys.exit(1)
 
@@ -290,7 +291,8 @@ class MapParser:
 
     def _validate_completion(self) -> None:
         if self.nb_drones is None:
-            self._raise_error("Missing 'nb_drones' definition.")
+            print("nb_drones is missing : error -> nb_drones was not provided in the file")
+            sys.exit(1)
         if self.start_hub is None:
             self._raise_error("Missing 'start_hub' definition.")
         if self.end_hub is None:
@@ -334,10 +336,10 @@ class MapParser:
 # ==========================================
 
 def _resolve_map_file() -> str:
-    """Retrieves target map file from CLI args or defaults to map.txt."""
+    """Retrieves target map file from defaults to default.txt."""
     if len(sys.argv) > 1 and sys.argv[1].endswith(".txt"):
         return sys.argv[1]
-    return "map.txt"
+    return "default.txt"
 
 
 # Parse automatically when imported so module-level variables are exported

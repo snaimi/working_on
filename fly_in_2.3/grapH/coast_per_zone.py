@@ -1,6 +1,7 @@
 import sys
+import heapq
 from typing import Dict, List, Optional, Union, Any, Set
-from new_parsing import list_zones, zone
+from parsing import list_zones, zone
 
 __all__ = [
     "list_zones",
@@ -15,15 +16,15 @@ class ZoneCost:
     
     def __init__(self, name: str, cost: Union[int, float]) -> None:
         self.name: str = name
-        self.coast: Union[int, float] = cost  # Maintained 'coast' attribute name for compatibility
+        self.cost: Union[int, float] = cost
 
 
 class ZoneCostCalculator:
-    """Handles individual zone cost evaluation and reverse Dijkstra/BFS path cost propagation."""
+    """Handles individual zone cost evaluation and reverse Dijkstra path cost propagation."""
 
     ZONE_TYPE_COSTS: Dict[str, Union[int, float]] = {
         "normal": 1,
-        "blocked": 0,
+        "blocked": float("inf"),  # Impassable zone
         "restricted": 2,
         "priority": 0.9,
     }
@@ -53,12 +54,43 @@ class ZoneCostCalculator:
         """Maps each zone name to its individual traversal cost."""
         return {z.name: self._get_single_zone_cost(z) for z in self.zones}
 
+    def is_path_blocked(self, target_start: str = "start") -> bool:
+        """
+        Validates if the path from start to a goal is missing, infinite cost, or passes through blocked nodes.
+        Returns True if the path is blocked/unreachable, False if a valid path exists.
+        """
+        if target_start not in self.cumulative_costs:
+            return True
+        
+        if self.cumulative_costs[target_start] == float("inf"):
+            return True
+
+        # Trace path from start to goal via parent_map to ensure no blocked nodes
+        curr: Optional[str] = target_start
+        visited: Set[str] = set()
+
+        while curr is not None:
+            if curr in visited:  # Cycle detection safety check
+                return True
+            visited.add(curr)
+
+            # Check if current node is explicitly marked blocked or impassable
+            if self.zone_costs.get(curr) == float("inf"):
+                return True
+
+            if curr in self.TARGET_GOAL_NAMES:
+                return False  # Successfully reached goal without encountering blocked nodes
+
+            curr = self.parent_map.get(curr)
+
+        return True
+
     def compute_cumulative_costs(
         self,
         target_goals: Optional[Union[str, List[str]]] = None,
         target_start: str = "start"
     ) -> None:
-        """Runs multi-source reverse BFS/Dijkstra to compute shortest path costs to any valid goal node."""
+        """Runs multi-source reverse Dijkstra using a min-heap priority queue."""
         
         # Determine target goals to search from
         if target_goals is None:
@@ -74,45 +106,53 @@ class ZoneCostCalculator:
             )
             sys.exit(1)
 
-        # Multi-source BFS/Dijkstra initialization
-        queue: List[str] = list(goals_to_check)
-        self.cumulative_costs = {goal: 0 for goal in goals_to_check}
+        # Priority Queue for Dijkstra: stores tuples of (cost, zone_name)
+        pq: List[tuple] = []
+        self.cumulative_costs = {}
         self.parent_map = {}
 
-        while queue:
-            element: str = queue.pop(0)
-            current_cost: Union[int, float] = self.cumulative_costs[element]
-            zone_item: Optional[zone] = self.zone_lookup.get(element)
+        for goal in goals_to_check:
+            self.cumulative_costs[goal] = 0
+            heapq.heappush(pq, (0, goal))
 
+        while pq:
+            current_cost, element = heapq.heappop(pq)
+
+            # Skip processing if we already found a cheaper way to 'element'
+            if current_cost > self.cumulative_costs.get(element, float("inf")):
+                continue
+
+            zone_item: Optional[zone] = self.zone_lookup.get(element)
             if not zone_item:
                 continue
 
             for child in zone_item.child:
                 child_cost: Union[int, float] = self.zone_costs.get(child, 1)
+
+                # Skip impassable/blocked nodes entirely
+                if child_cost == float("inf"):
+                    continue
+
                 potential_cost: Union[int, float] = current_cost + child_cost
 
-                # If a cheaper route is found, update cost and queue neighbor
-                if (
-                    child not in self.cumulative_costs
-                    or potential_cost < self.cumulative_costs[child]
-                ):
+                # If a strictly cheaper route is found, update cost and push to priority queue
+                if potential_cost < self.cumulative_costs.get(child, float("inf")):
                     self.cumulative_costs[child] = potential_cost
                     self.parent_map[child] = element
+                    heapq.heappush(pq, (potential_cost, child))
 
-                    if child not in queue:
-                        queue.append(child)
-
-        # Check if at least one path connects the start hub to any goal
-        if target_start not in self.cumulative_costs:
+        # Validate if path from start is blocked or unreachable
+        if self.is_path_blocked(target_start):
             sys.stderr.write(
-                f"No path error: No valid path exists between '{target_start}' and any destination goals ({', '.join(goals_to_check)}).\n"
+                f"Path error: Path from '{target_start}' to destination goals ({', '.join(goals_to_check)}) is blocked or non-existent.\n"
             )
             sys.exit(1)
 
-        # Populate legacy obj_ls objects
+        # Populate obj_ls with reachable non-infinite cost nodes
         self.obj_ls = [
             ZoneCost(name, final_cost) 
             for name, final_cost in self.cumulative_costs.items()
+            if final_cost != float("inf")
         ]
 
 

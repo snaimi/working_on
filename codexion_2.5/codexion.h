@@ -6,7 +6,7 @@
 /*   By: snaimi <snaimi@student.1337.ma>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/24 03:00:00 by norminette        #+#    #+#             */
-/*   Updated: 2026/09/06 09:52:55 by snaimi           ###   ########.fr       */
+/*   Updated: 2026/09/12 00:23:29 by snaimi           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,13 +22,29 @@
 # define SCHEDULER_FIFO 0
 # define SCHEDULER_EDF  1
 
+typedef struct s_coder	t_coder;
+
+typedef struct s_heap_node
+{
+	t_coder		*coder;
+	long long	key;
+	long long	seq;
+}	t_heap_node;
+
+typedef struct s_heap
+{
+	t_heap_node	*data;
+	int			capacity;
+	int			size;
+}	t_heap;
+
 typedef struct s_dongle
 {
 	int				id;
 	int				in_use;
 	long long		cooldown_until;
 	pthread_mutex_t	mutex;
-	pthread_cond_t	cond;
+	t_heap			queue;
 }	t_dongle;
 
 typedef struct s_metrics
@@ -43,7 +59,7 @@ typedef struct s_metrics
 	int			scheduler;
 }	t_metrics;
 
-typedef struct s_coder
+struct s_coder
 {
 	int				id;
 	pthread_t		thread;
@@ -52,13 +68,14 @@ typedef struct s_coder
 	t_dongle		*left_dongle;
 	t_dongle		*right_dongle;
 	struct s_data	*data;
-}	t_coder;
+};
 
 typedef struct s_data
 {
 	t_metrics		metrics;
 	long long		start_time;
 	int				simulation_over;
+	long long		global_seq;
 	pthread_mutex_t	state_mutex;
 	pthread_mutex_t	write_mutex;
 	pthread_t		monitor_thread;
@@ -66,7 +83,14 @@ typedef struct s_data
 	t_dongle		*dongles;
 }	t_data;
 
-/* --- FUNCTION PROTOTYPES --- */
+/* Priority Queue / Heap Operations (heap.c & heap_peek.c) */
+int			heap_init(t_heap *heap, int capacity);
+void		heap_destroy(t_heap *heap);
+int			heap_push(t_heap *heap, t_coder *coder,
+				long long key, long long seq);
+t_coder		*heap_pop(t_heap *heap);
+t_coder		*heap_peek(t_heap *heap);
+void		heap_remove(t_heap *heap, t_coder *coder);
 
 /* Parsing (parsing.c) */
 int			parse_arguments(int argc, char **argv, t_metrics *metrics);
@@ -76,11 +100,16 @@ long long	get_time_ms(void);
 void		precise_sleep(long long duration_ms, t_data *data);
 void		log_status(t_coder *coder, const char *status);
 
-/* Dongle Operations (dongle.c) */
+/* Dongle Operations (dongle.c & dongle_acquire.c) */
 void		init_dongles(t_data *data);
 void		destroy_dongles(t_data *data);
+int			acquire_one_dongle(t_coder *coder, t_dongle *dongle);
 int			take_dongles(t_coder *coder);
 void		release_dongles(t_coder *coder);
+int			is_simulation_over(t_coder *coder);
+void		get_priority_keys(t_coder *coder, long long *key, long long *seq);
+int			handle_single_coder(t_coder *coder, t_dongle *f);
+int			try_grab_both(t_coder *coder, t_dongle *f, t_dongle *s);
 
 /* Routines & Threads (routines.c & monitor.c) */
 void		*coder_routine(void *arg);

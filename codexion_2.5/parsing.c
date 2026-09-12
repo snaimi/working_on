@@ -6,7 +6,7 @@
 /*   By: snaimi <snaimi@student.1337.ma>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/24 03:00:00 by norminette        #+#    #+#             */
-/*   Updated: 2026/09/06 09:53:49 by snaimi           ###   ########.fr       */
+/*   Updated: 2026/09/12 00:16:45 by snaimi           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,8 +54,7 @@ static int	parse_scheduler(int argc, char **argv, t_metrics *m)
 	}
 	else
 	{
-		m->dongle_cooldown = 0;
-		idx = 7;
+		return (0);
 	}
 	if (ft_strcmp(argv[idx], "edf") == 0)
 		m->scheduler = SCHEDULER_EDF;
@@ -82,7 +81,7 @@ int	parse_arguments(int argc, char **argv, t_metrics *metrics)
 		|| metrics->time_to_compile < 0 || metrics->time_to_debug < 0
 		|| metrics->time_to_refactor < 0 || metrics->dongle_cooldown < 0)
 		return (0);
-	if (metrics->number_of_compiles_required <= 0)
+	if (metrics->number_of_compiles_required < 0)
 		metrics->number_of_compiles_required = -1;
 	return (1);
 }

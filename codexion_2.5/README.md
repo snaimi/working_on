@@ -1,5 +1,4 @@
-```markdown
-*This project has been created as part of the 42 curriculum by [snaimi].*
+*This project has been created as part of the 42 curriculum by snaimi.*
 
 # Codexion
 
@@ -197,7 +196,3 @@ AI (Large Language Models) was utilized during the development of this project f
 ## Acknowledgments
 
 A special thank you to **1337 School**, part of the 42 Network, along with all the amazing staff members and fellow students. Thank you for cultivating an empowering, peer-learning environment and providing the tools, challenges, and support necessary to continuously grow as software engineers.
-
-```
-
-```

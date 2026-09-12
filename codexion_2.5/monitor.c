@@ -6,25 +6,11 @@
 /*   By: snaimi <snaimi@student.1337.ma>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/24 03:00:00 by norminette        #+#    #+#             */
-/*   Updated: 2026/09/06 19:21:59 by snaimi           ###   ########.fr       */
+/*   Updated: 2026/09/11 23:45:54 by snaimi           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "codexion.h"
-
-static void	wake_all_threads(t_data *data)
-{
-	int	i;
-
-	i = 0;
-	while (i < data->metrics.number_of_coders)
-	{
-		pthread_mutex_lock(&data->dongles[i].mutex);
-		pthread_cond_broadcast(&data->dongles[i].cond);
-		pthread_mutex_unlock(&data->dongles[i].mutex);
-		i++;
-	}
-}
 
 static void	stop_due_to_burnout(t_data *data, int id, long long ts)
 {
@@ -33,7 +19,6 @@ static void	stop_due_to_burnout(t_data *data, int id, long long ts)
 	printf("%lld %d burned out\n", ts - data->start_time, id);
 	pthread_mutex_unlock(&data->write_mutex);
 	pthread_mutex_unlock(&data->state_mutex);
-	wake_all_threads(data);
 }
 
 static int	check_all_compiles_completed(t_data *data)
@@ -90,7 +75,6 @@ void	*monitor_routine(void *arg)
 		{
 			data->simulation_over = 1;
 			pthread_mutex_unlock(&data->state_mutex);
-			wake_all_threads(data);
 			break ;
 		}
 		if (check_burnout(data))
